@@ -3,34 +3,54 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-	<title id="titleWwebJs">Whatsapp API</title>
-  <!-- This parts is optional, just for improve the styles -->
+  <title>Multi-Session WhatsApp API</title>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="dist/css/index.css">
 </head>
 <body>
-
-	<div id="app">
-		<h1>Whatsapp API</h1>
+  <div id="app">
+    <h1>Multi-Session WhatsApp API</h1>
     <hr>
-    <br>
-    Status <span id="badgeStatusServer" class="badge badge-secondary">Loading...</span>
-    <br>
-		Server <span id="serverWwebJs" class="badge badge-secondary">Loading...</span>
-		<img src="" alt="QR Code" id="qrcode">
-		<h3>Logs:</h3>
-		<ul class="logs"></ul>
-	</div>
-  <div id="response" class="response">
-  <h3>Response Server:</h3>
-<pre id="responseServer">
-//response server
-</pre>
+    
+    <div id="session-management">
+      <h2>Kelola Session</h2>
+      <form id="addSessionForm">
+        <input type="text" id="sessionId" placeholder="Nama Session" required>
+        <input type="number" id="port" placeholder="Port" required>
+        <button type="submit">Tambah Session</button>
+      </form>
+      
+      <table id="sessions">
+        <thead>
+          <tr>
+            <th>Nama Session</th>
+            <th>Nomor</th>
+            <th>Nama WhatsApp</th>
+            <th>Status</th>
+            <th>Aksi</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div id="qrModal" class="modal">
+      <div class="modal-content">
+        <span class="close">&times;</span>
+        <h3>Scan QR Code untuk <span id="modalSessionName"></span></h3>
+        <img id="qrImage" src="" alt="QR Code">
+      </div>
+    </div>
+
+    <div id="response" class="response">
+      <h3>Response Server:</h3>
+      <pre id="responseServer"></pre>
+    </div>
   </div>
 
-	<script src="plugins/jquery/jquery.min.js" crossorigin="anonymous"></script>
-	<script src="plugins/socket.io/socket.io.js" crossorigin="anonymous"></script>
-  <script src="plugins/moment/moment-with-locales.min.js" crossorigin="anonymous"></script>
-  <script src="dist/js/index.js" crossorigin="anonymous"></script>
+  <script src="plugins/jquery/jquery.min.js"></script>
+  <script src="plugins/socket.io/socket.io.js"></script>
+  <script src="plugins/moment/moment-with-locales.min.js"></script>
+  <script src="dist/js/index.js"></script>
 </body>
 </html>
