@@ -5,12 +5,11 @@ $(document).ready(function() {
   $('#addSessionForm').submit(function(e) {
     e.preventDefault();
     const sessionId = $('#sessionId').val();
-    const port = $('#port').val();
     
-    $.post('/api/sessions', { sessionId, port })
+    $.post('/api/sessions', { sessionId })
       .done(() => {
-        addSessionRow(sessionId, port);
-        $('#sessionId, #port').val('');
+        addSessionRow(sessionId);
+        $('#sessionId').val('');
       })
       .fail(err => showError(err.responseJSON.error));
   });
@@ -22,7 +21,7 @@ $(document).ready(function() {
   });
 });
 
-function addSessionRow(sessionId, port) {
+function addSessionRow(sessionId) {
   const row = `
     <tr data-session="${sessionId}">
       <td>${sessionId}</td>
