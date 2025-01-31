@@ -19,6 +19,7 @@ const io = socketIO(server);
 
 // Session Management
 const sessions = new Map();
+const SESSIONS_FILE = './sessions.json';
 
 app.use(cors());
 app.use(express.json());
@@ -26,6 +27,29 @@ app.use(express.urlencoded({ extended: true }));
 app.use(fileUpload({ debug: true }));
 app.use('/dist', express.static(path.join(__dirname, 'dist')));
 app.use('/plugins', express.static(path.join(__dirname, 'plugins')));
+
+function saveSessionsToFile() {
+  const sessionData = Array.from(sessions.entries()).map(([sessionId, session]) => ({
+    sessionId,
+    connected: session.connected,
+    phoneNumber: session.phoneNumber,
+    pushname: session.pushname
+  }));
+  fs.writeFileSync(SESSIONS_FILE, JSON.stringify(sessionData, null, 2));
+}
+
+function loadSessionsFromFile() {
+  if (fs.existsSync(SESSIONS_FILE)) {
+    const sessionData = JSON.parse(fs.readFileSync(SESSIONS_FILE));
+    sessionData.forEach(({ sessionId, connected, phoneNumber, pushname }) => {
+      const client = createClient(sessionId);
+      sessions.set(sessionId, { client, connected, phoneNumber, pushname });
+      if (connected) {
+        client.initialize();
+      }
+    });
+  }
+}
 
 function createClient(sessionId) {
   const client = new Client({
@@ -66,6 +90,8 @@ function createClient(sessionId) {
     sessionData.connected = true;
     sessionData.phoneNumber = client.info.wid.user;
     sessionData.pushname = client.info.pushname;
+
+    saveSessionsToFile();
     
     io.to(sessionId).emit('ready', { 
       sessionId,
@@ -81,6 +107,7 @@ function createClient(sessionId) {
   client.on('disconnected', (reason) => {
     io.to(sessionId).emit('disconnected', { sessionId, reason });
     sessions.delete(sessionId);
+    saveSessionsToFile();
   });
 
   client.on('message', msg => handleMessage(sessionId, msg));
@@ -193,7 +220,19 @@ app.post('/api/sessions', [
     pushname: null
   });
 
+  saveSessionsToFile();
   res.json({ success: true });
+});
+
+// Dapatkan Daftar Session
+app.get('/api/sessions', (req, res) => {
+  const sessionList = Array.from(sessions.entries()).map(([sessionId, sessionData]) => ({
+    sessionId,
+    connected: sessionData.connected,
+    phoneNumber: sessionData.phoneNumber,
+    pushname: sessionData.pushname
+  }));
+  res.json(sessionList);
 });
 
 // Send Message
@@ -292,14 +331,14 @@ app.post('/:sessionId/send-media-link', async (req, res) => {
   }
 });
 
-const findGroupByName = async function(name) {
+const findGroupByName = async function(client, name) {
   const group = await client.getChats().then(chats => {
     return chats.find(chat => 
-      chat.isGroup && chat.name.toLowerCase() == name.toLowerCase()
+      chat.isGroup && chat.name.toLowerCase() === name.toLowerCase()
     );
   });
   return group;
-}
+};
 
 // Send message to group
 // You can use chatID or group name, yea!
@@ -312,11 +351,7 @@ app.post('/:sessionId/send-group-message', [
   }),
   body('message').notEmpty(),
 ], async (req, res) => {
-  const errors = validationResult(req).formatWith(({
-    msg
-  }) => {
-    return msg;
-  });
+  const errors = validationResult(req).formatWith(({ msg }) => msg);
 
   if (!errors.isEmpty()) {
     return res.status(422).json({
@@ -324,20 +359,26 @@ app.post('/:sessionId/send-group-message', [
       message: errors.mapped()
     });
   }
-  
-  const session = sessions.get(req.params.sessionId);
-  if (!session) return res.status(404).json({ error: 'Session not found' });
 
+  const sessionId = req.params.sessionId;
+  const session = sessions.get(sessionId);
+
+  if (!session) {
+    return res.status(404).json({
+      status: false,
+      message: `Session dengan ID ${sessionId} tidak ditemukan!`
+    });
+  }
+
+  const { client } = session;
   let chatId = req.body.id;
   const groupName = req.body.name;
   const message = req.body.message;
 
-  // Find the group by name
+  // Cari grup berdasarkan nama jika chatId tidak disediakan
   if (!chatId) {
-    const group = await findGroupByName(groupName);
+    const group = await findGroupByName(client, groupName);
     if (!group) {
-      connectedSocket.emit('message', `Grup ${groupName} tidak ditemukan!`);
-      connectedSocket.emit('response', `{ status: false, message: "Grup ${groupName} tidak ditemukan!"}`);
       return res.status(422).json({
         status: false,
         message: `Grup ${groupName} tidak ditemukan!`
@@ -347,10 +388,16 @@ app.post('/:sessionId/send-group-message', [
   }
 
   try {
-    const response = await session.client.sendMessage(chatId, message);
-    res.json({ status: true, response });
+    const response = await client.sendMessage(chatId, message);
+    res.status(200).json({
+      status: true,
+      response: response
+    });
   } catch (err) {
-    res.status(500).json({ status: false, error: err.message });
+    res.status(500).json({
+      status: false,
+      response: err.message
+    });
   }
 });
 
@@ -443,17 +490,6 @@ app.post('/delete-message', [
   }
 });
 
-// Dapatkan Daftar Session
-app.get('/api/sessions', (req, res) => {
-  const sessionList = Array.from(sessions.entries()).map(([sessionId, sessionData]) => ({
-    sessionId,
-    connected: sessionData.connected,
-    phoneNumber: sessionData.phoneNumber,
-    pushname: sessionData.pushname
-  }));
-  res.json(sessionList);
-});
-
 // Socket.IO Setup
 io.on('connection', (socket) => {
   socket.on('joinSession', (sessionId) => {
@@ -478,6 +514,7 @@ io.on('connection', (socket) => {
   });
 });
 
+loadSessionsFromFile();
 // Jalankan Server
 server.listen(port, () => {
   console.log(`Server berjalan di http://localhost:${port}`);
