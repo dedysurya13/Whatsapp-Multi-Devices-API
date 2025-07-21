@@ -39,14 +39,31 @@ function saveSessionsToFile() {
 }
 
 function loadSessionsFromFile() {
+  // if (fs.existsSync(SESSIONS_FILE)) {
+  //   const sessionData = JSON.parse(fs.readFileSync(SESSIONS_FILE));
+  //   sessionData.forEach(({ sessionId, connected, phoneNumber, pushname }) => {
+  //     const client = createClient(sessionId);
+  //     sessions.set(sessionId, { client, connected, phoneNumber, pushname });
+  //     if (connected) {
+  //       client.initialize();
+  //     }
+  //   });
+  // }
   if (fs.existsSync(SESSIONS_FILE)) {
     const sessionData = JSON.parse(fs.readFileSync(SESSIONS_FILE));
-    sessionData.forEach(({ sessionId, connected, phoneNumber, pushname }) => {
+    sessionData.forEach(({ sessionId }) => {
       const client = createClient(sessionId);
-      sessions.set(sessionId, { client, connected, phoneNumber, pushname });
-      if (connected) {
-        client.initialize();
-      }
+
+      // Simpan dummy data dulu, nanti akan di-update saat event 'ready'
+      sessions.set(sessionId, {
+        client,
+        connected: false,
+        phoneNumber: null,
+        pushname: null,
+      });
+
+      // Inisialisasi client setelah bind semua listener
+      client.initialize();
     });
   }
 }
@@ -104,14 +121,36 @@ function createClient(sessionId) {
     io.to(sessionId).emit('authenticated', { sessionId });
   });
 
-  client.on('disconnected', (reason) => {
-    io.to(sessionId).emit('disconnected', { sessionId, reason });
-    sessions.delete(sessionId);
-    saveSessionsToFile();
+  client.on("auth_failure", (msg) => {
+    console.error(`[${sessionId}] Authentication failed:`, msg);
+  });
+
+  // client.on('disconnected', (reason) => {
+  //   // io.to(sessionId).emit('disconnected', { sessionId, reason });
+  //   // sessions.delete(sessionId);
+  //   // saveSessionsToFile();
+  //   console.log(`[${sessionId}] Disconnected:`, reason);
+  //   sessions.delete(sessionId);
+  //   saveSessionsToFile();
+  // });
+
+  client.on("disconnected", (reason) => {
+    console.log(`[${sessionId}] Disconnected:`, reason);
+
+    const sessionData = sessions.get(sessionId);
+
+    if (sessionData) {
+      sessionData.connected = false;
+      saveSessionsToFile();
+      io.to(sessionId).emit("disconnected", {
+        sessionId,
+        reason: "Session disconnected",
+      });
+    }
   });
 
   client.on('message', msg => handleMessage(sessionId, msg));
-  client.initialize();
+  // client.initialize();
   return client;
 }
 
@@ -204,24 +243,52 @@ app.get('/', (req, res) => {
 });
 
 // Create New Session
-app.post('/api/sessions', [
-  body('sessionId').notEmpty(),
-], (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+// app.post('/api/sessions', [
+//   body('sessionId').notEmpty(),
+// ], (req, res) => {
+//   const errors = validationResult(req);
+//   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-  const { sessionId, port } = req.body;
-  if (sessions.has(sessionId)) return res.status(400).json({ error: 'Session already exists' });
+//   const { sessionId, port } = req.body;
+//   if (sessions.has(sessionId)) return res.status(400).json({ error: 'Session already exists' });
+
+//   sessions.set(sessionId, {
+//     client: createClient(sessionId),
+//     connected: false,
+//     phoneNumber: null,
+//     pushname: null
+//   });
+
+//   saveSessionsToFile();
+//   res.json({ success: true });
+// });
+app.post("/api/sessions", [body("sessionId").notEmpty()], (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty())
+    return res.status(400).json({ errors: errors.array() });
+
+  const { sessionId } = req.body; // port tidak digunakan, bisa dihapus
+  if (sessions.has(sessionId))
+    return res.status(400).json({ error: "Session already exists" });
+
+  // Membuat client (tanpa initialize)
+  const client = createClient(sessionId);
 
   sessions.set(sessionId, {
-    client: createClient(sessionId),
+    client: client,
     connected: false,
     phoneNumber: null,
-    pushname: null
+    pushname: null,
   });
 
+  // PANGGIL INITIALIZE DI SINI SETELAH SESI DIBUAT
+  client.initialize();
+
   saveSessionsToFile();
-  res.json({ success: true });
+  res.json({
+    success: true,
+    message: "Session created. Please scan the QR code.",
+  });
 });
 
 // Dapatkan Daftar Session
@@ -488,6 +555,24 @@ app.post('/delete-message', [
       error: err.message
     });
   }
+});
+
+app.post("/api/sessions/:sessionId/logout", (req, res) => {
+  const sessionId = req.params.sessionId;
+  const session = sessions.get(sessionId);
+
+  if (!session) return res.status(404).json({ error: "Session not found" });
+
+  session.client
+    .logout()
+    .then(() => {
+      sessions.delete(sessionId);
+      saveSessionsToFile();
+      res.json({ success: true });
+    })
+    .catch((err) => {
+      res.status(500).json({ error: err.message });
+    });
 });
 
 // Socket.IO Setup
