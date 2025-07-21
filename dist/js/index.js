@@ -1,6 +1,15 @@
 const socket = io();
 
 $(document).ready(function() {
+  // Muat sesi yang tersimpan
+  $.get('/api/sessions')
+    .done(sessions => {
+      sessions.forEach(session => {
+        addSessionRow(session.sessionId, session.phoneNumber, session.pushname, session.connected);
+      });
+    })
+    .fail(err => showError(err.responseJSON.error));
+
   // Handle tambah session
   $('#addSessionForm').submit(function(e) {
     e.preventDefault();
@@ -21,16 +30,20 @@ $(document).ready(function() {
   });
 });
 
-function addSessionRow(sessionId) {
+function addSessionRow(sessionId, phoneNumber = '-', pushname = '-', connected = false) {
+  const status = connected ? '✅ Connected' : '❌ Disconnected';
+  const connectDisplay = connected ? 'none' : 'inline-block';
+  const disconnectDisplay = connected ? 'inline-block' : 'none';
+
   const row = `
     <tr data-session="${sessionId}">
       <td>${sessionId}</td>
-      <td class="phone">-</td>
-      <td class="name">-</td>
-      <td><span class="status">❌ Disconnected</span></td>
+      <td class="phone">${phoneNumber}</td>
+      <td class="name">${pushname}</td>
+      <td><span class="status">${status}</span></td>
       <td>
-        <button class="connect">Connect</button>
-        <button class="disconnect" style="display:none;">Disconnect</button>
+        <button class="connect" style="display:${connectDisplay};">Connect</button>
+        <button class="disconnect" style="display:${disconnectDisplay};">Disconnect</button>
       </td>
     </tr>
   `;
