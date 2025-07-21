@@ -1,39 +1,52 @@
 const socket = io();
 
-$(document).ready(function() {
+$(document).ready(function () {
   // Muat sesi yang tersimpan
-  $.get('/api/sessions')
-    .done(sessions => {
-      sessions.forEach(session => {
-        addSessionRow(session.sessionId, session.phoneNumber, session.pushname, session.connected);
+  $.get("/api/sessions")
+    .done((sessions) => {
+      sessions.forEach((session) => {
+        addSessionRow(
+          session.sessionId,
+          session.phoneNumber,
+          session.pushname,
+          session.connected
+        );
+
+        // Langsung bergabung ke room socket agar bisa menerima update status
+        socket.emit("joinSession", session.sessionId);
       });
     })
-    .fail(err => showError(err.responseJSON.error));
+    .fail((err) => showError(err.responseJSON.error));
 
   // Handle tambah session
-  $('#addSessionForm').submit(function(e) {
+  $("#addSessionForm").submit(function (e) {
     e.preventDefault();
-    const sessionId = $('#sessionId').val();
-    
-    $.post('/api/sessions', { sessionId })
+    const sessionId = $("#sessionId").val();
+
+    $.post("/api/sessions", { sessionId })
       .done(() => {
         addSessionRow(sessionId);
-        $('#sessionId').val('');
+        $("#sessionId").val("");
       })
-      .fail(err => showError(err.responseJSON.error));
+      .fail((err) => showError(err.responseJSON.error));
   });
 
   // Handle modal
-  $('.close').click(() => $('#qrModal').hide());
-  $(window).click(e => {
-    if (e.target.id === 'qrModal') $('#qrModal').hide();
+  $(".close").click(() => $("#qrModal").hide());
+  $(window).click((e) => {
+    if (e.target.id === "qrModal") $("#qrModal").hide();
   });
 });
 
-function addSessionRow(sessionId, phoneNumber = '-', pushname = '-', connected = false) {
-  const status = connected ? '✅ Connected' : '❌ Disconnected';
-  const connectDisplay = connected ? 'none' : 'inline-block';
-  const disconnectDisplay = connected ? 'inline-block' : 'none';
+function addSessionRow(
+  sessionId,
+  phoneNumber = "-",
+  pushname = "-",
+  connected = false
+) {
+  const status = connected ? "✅ Connected" : "❌ Disconnected";
+  const connectDisplay = connected ? "none" : "inline-block";
+  const disconnectDisplay = connected ? "inline-block" : "none";
 
   const row = `
     <tr data-session="${sessionId}">
@@ -47,46 +60,46 @@ function addSessionRow(sessionId, phoneNumber = '-', pushname = '-', connected =
       </td>
     </tr>
   `;
-  $('#sessions tbody').append(row);
+  $("#sessions tbody").append(row);
 }
 
 // Handle session events
 $(document)
-  .on('click', '.connect', function() {
-    const sessionId = $(this).closest('tr').data('session');
-    socket.emit('joinSession', sessionId);
+  .on("click", ".connect", function () {
+    const sessionId = $(this).closest("tr").data("session");
+    socket.emit("joinSession", sessionId);
     showQrModal(sessionId);
   })
-  .on('click', '.disconnect', function() {
-    const sessionId = $(this).closest('tr').data('session');
-    socket.emit('disconnectSession', sessionId);
+  .on("click", ".disconnect", function () {
+    const sessionId = $(this).closest("tr").data("session");
+    socket.emit("disconnectSession", sessionId);
   });
 
 socket
-  .on('qr', ({ sessionId, url }) => {
-    $('#modalSessionName').text(sessionId);
-    $('#qrImage').attr('src', url);
-    $('#qrModal').show();
+  .on("qr", ({ sessionId, url }) => {
+    $("#modalSessionName").text(sessionId);
+    $("#qrImage").attr("src", url);
+    $("#qrModal").show();
   })
-  .on('ready', ({ sessionId, phoneNumber, pushname }) => {
+  .on("ready", ({ sessionId, phoneNumber, pushname }) => {
     const row = $(`tr[data-session="${sessionId}"]`);
-    row.find('.phone').text(phoneNumber);
-    row.find('.name').text(pushname);
-    row.find('.status').html('✅ Connected');
-    row.find('.connect').hide();
-    row.find('.disconnect').show();
-    $('#qrModal').hide();
+    row.find(".phone").text(phoneNumber);
+    row.find(".name").text(pushname);
+    row.find(".status").html("✅ Connected");
+    row.find(".connect").hide();
+    row.find(".disconnect").show();
+    $("#qrModal").hide();
   })
-  .on('disconnected', ({ sessionId }) => {
+  .on("disconnected", ({ sessionId }) => {
     const row = $(`tr[data-session="${sessionId}"]`);
-    row.find('.status').html('❌ Disconnected');
-    row.find('.connect').show();
-    row.find('.disconnect').hide();
+    row.find(".status").html("❌ Disconnected");
+    row.find(".connect").show();
+    row.find(".disconnect").hide();
   });
 
 function showQrModal(sessionId) {
-  $('#modalSessionName').text(sessionId);
-  $('#qrModal').show();
+  $("#modalSessionName").text(sessionId);
+  $("#qrModal").show();
 }
 
 function showError(message) {
