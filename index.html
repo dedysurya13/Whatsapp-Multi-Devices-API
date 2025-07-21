@@ -15,7 +15,7 @@
     <div id="session-management">
       <h2>Kelola Session</h2>
       <form id="addSessionForm">
-        <input type="text" id="sessionId" placeholder="Nama Session" required>
+        <input type="text" id="sessionId" placeholder="Nama Session" autocomplete="off" required>
         <button type="submit">Tambah Session</button>
       </form>
       
@@ -35,15 +35,20 @@
 
     <div id="qrModal" class="modal">
       <div class="modal-content">
-        <span class="close">&times;</span>
         <h3>Scan QR Code untuk <span id="modalSessionName"></span></h3>
-        <img id="qrImage" src="" alt="QR Code">
+        <img id="qrImage" src="" alt="Tunggu hingga QR code muncul!">
       </div>
     </div>
-
-    <div id="response" class="response">
-      <h3>Response Server:</h3>
-      <pre id="responseServer"></pre>
+    
+    <div id="panelContainer">
+      <div id="logs">
+        <h3>Logs:</h3>
+        <ul class="logs"></ul>
+      </div>
+      <div id="response">
+        <h3>Response Server:</h3>
+        <pre id="responseServer"></pre>
+      </div>
     </div>
   </div>
 
