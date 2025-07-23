@@ -1,7 +1,7 @@
 {
   "name": "whatsapp-api",
-  "version": "1.0.4",
-  "description": "Whatsapp api by Ngekoding and redeveloped by Tim IT RSU Islam Cawas",
+  "version": "1.0.0",
+  "description": "Multi-session Whatsapp API using whatsapp-web.js",
   "main": "app.js",
   "scripts": {
     "start": "node app.js",
@@ -14,9 +14,15 @@
   },
   "keywords": [
     "whatsapp-api",
-    "node.js"
+    "node.js",
+    "whatsapp-web.js",
+    "multi-session",
+    "whatsapp",
+    "whatsapp-web",
+    "api",
+    "wweb.js"
   ],
-  "author": "Tim IT RSU Islam Cawas",
+  "author": "Dedy Surya Prihantoro",
   "license": "MIT",
   "dependencies": {
     "@pedroslopez/moduleraid": "^5.0.2",
