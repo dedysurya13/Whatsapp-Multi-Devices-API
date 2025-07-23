@@ -69,6 +69,12 @@ body {
   cursor: pointer;
 }
 
+#sessions .delete-session {
+  background: #9E9E9E;
+  color: white;
+  margin-left: 5px; 
+}
+
 #sessions .connect {
   background: #2196F3;
   color: white;
@@ -115,6 +121,21 @@ body {
   margin: 20px 0;
 }
 
+#modalLoader {
+  border: 8px solid #f3f3f3; /* Lingkaran abu-abu muda */
+  border-top: 8px solid #3498db; /* Warna biru untuk bagian yang berputar */
+  border-radius: 50%;
+  width: 60px;
+  height: 60px;
+  animation: spin 1s linear infinite;
+  margin: 20px auto; /* Agar posisinya di tengah modal */
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
 .response {
   margin-top: 30px;
   padding: 20px;
@@ -126,6 +147,7 @@ body {
   background: white;
   padding: 15px;
   border-radius: 4px;
+  min-height: 300px;
   max-height: 300px;
   overflow: auto;
 }
@@ -148,7 +170,8 @@ body {
 }
 
 ul.logs {
-  max-height: 150px;
+  min-height: 300px;
+  max-height: 300px;
   padding: 15px 15px 15px 30px;
   border-radius: 4px;
   overflow-y: auto;
