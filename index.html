@@ -36,7 +36,12 @@
     <div id="qrModal" class="modal">
       <div class="modal-content">
         <h3>Scan QR Code untuk <span id="modalSessionName"></span></h3>
-        <img id="qrImage" src="" alt="Tunggu hingga QR code muncul!">
+        
+        <div id="modalLoader"></div>
+    
+        <img id="qrImage" src="" alt="Menyiapkan QR Code..." style="display: none;">
+    
+        <p id="modalMessage" style="text-align: center; margin-top: 15px;"></p>
       </div>
     </div>
     
