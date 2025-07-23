@@ -12,6 +12,46 @@ const mime = require('mime-types');
 const cors = require('cors');
 const path = require('path');
 
+//Catch Unhandled Promise Rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('UNHANDLED REJECTION!');
+  console.error('Reason:', reason);
+  if (reason && reason.message && reason.message.includes('Target closed')) {
+    console.warn('[Warning] "Target closed" error handled gracefully.');
+    return;
+  }
+
+  if (reason && reason.message && reason.message.includes('ERR_NAME_NOT_RESOLVED')) {
+    console.error('[Network Error] Could not resolve domain. Please check the server\'s internet connection and DNS settings then restart the server.');
+  } else {
+    console.error('Reason:', reason);
+  }
+
+  server.close(() => {
+    process.exit(1);
+  });
+});
+
+//Catch Uncaught Synchronous Exceptions
+process.on('uncaughtException', (error) => {
+  console.error('UNCAUGHT EXCEPTION! Shutting down...');
+  console.error('Error:', error);
+  process.exit(1);
+});
+
+//Graceful Shutdown
+const shutdown = (signal) => {
+  console.log(`\n${signal} received. Shutting down gracefully...`);
+  server.close(() => {
+    console.log('All connections closed. Server is down.');
+    process.exit(0);
+  });
+};
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+
+
 const port = process.env.PORT || 8000;
 const app = express();
 const server = http.createServer(app);
@@ -39,22 +79,11 @@ function saveSessionsToFile() {
 }
 
 function loadSessionsFromFile() {
-  // if (fs.existsSync(SESSIONS_FILE)) {
-  //   const sessionData = JSON.parse(fs.readFileSync(SESSIONS_FILE));
-  //   sessionData.forEach(({ sessionId, connected, phoneNumber, pushname }) => {
-  //     const client = createClient(sessionId);
-  //     sessions.set(sessionId, { client, connected, phoneNumber, pushname });
-  //     if (connected) {
-  //       client.initialize();
-  //     }
-  //   });
-  // }
   if (fs.existsSync(SESSIONS_FILE)) {
     const sessionData = JSON.parse(fs.readFileSync(SESSIONS_FILE));
     sessionData.forEach(({ sessionId }) => {
       const client = createClient(sessionId);
 
-      // Simpan dummy data dulu, nanti akan di-update saat event 'ready'
       sessions.set(sessionId, {
         client,
         connected: false,
@@ -62,7 +91,6 @@ function loadSessionsFromFile() {
         pushname: null,
       });
 
-      // Inisialisasi client setelah bind semua listener
       client.initialize();
     });
   }
@@ -74,31 +102,47 @@ function createClient(sessionId) {
     puppeteer: {
       headless: true,
       args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--disable-gpu'
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-accelerated-2d-canvas",
+        "--no-first-run",
+        "--no-zygote",
+        "--single-process", // Matikan multi-process untuk mengurangi penggunaan memori
+        "--disable-gpu",
+        "--disable-extensions", // Matikan ekstensi
+        "--disable-background-networking", // Matikan proses network di latar belakang
+        "--disable-default-apps", // Matikan aplikasi default
+        "--disable-sync", // Matikan sinkronisasi
+        "--disable-translate", // Matikan fitur terjemahan
+        "--hide-scrollbars", // Sembunyikan scrollbar
+        "--mute-audio", // Matikan audio
+        "--no-default-browser-check", // Jangan cek browser default
+        "--no-pings", // Jangan kirim ping
+        "--no-startup-window", // Jangan buat startup window
+        "--safeBrowse-disable-auto-update", // Matikan update safeBrowse
+        "--ignore-certificate-errors",
+        "--ignore-ssl-errors",
+        "--ignore-certificate-errors-spki-list",
       ],
     },
     authStrategy: new LocalAuth({
-      clientId: sessionId 
-    // dataPath: './.wwebjs_auth'
+      clientId: sessionId,
+      // dataPath: './.wwebjs_auth'
     }),
-  // webVersionCache: {
+    // webVersionCache: {
     // type: 'none'
     // type: 'remote',
     // remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2413.51-beta.html',
     // remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1014547162-alpha.html'
-  // }
+    // }
   });
 
   client.on('qr', (qr) => {
     qrcode.toDataURL(qr, (err, url) => {
       io.to(sessionId).emit('qr', { sessionId, url });
     });
+    io.to(sessionId).emit("message", "QR Code diterima, silakan scan.");
   });
 
   client.on('ready', async () => {
@@ -121,18 +165,26 @@ function createClient(sessionId) {
     io.to(sessionId).emit('authenticated', { sessionId });
   });
 
+  client.on("message_ack", (msg, ack) => {
+    const ackStatus = {
+      "-1": "Error", //error kirim ke server
+      0: "Pending", //pending kirim ke server
+      1: "Server", //berhasil dikirim ke server
+      2: "Device", //berhasil dikirim ke penerima
+      3: "Read", //telah dibaca
+      4: "Played", //telah diputar (audio/video)
+    };
+    io.to(sessionId).emit("message_ack", {
+      sesId:sessionId,
+      id: msg.id.id,
+      ack: ack,
+      ackName: ackStatus[ack] || "Unknown",
+    });
+  });
+
   client.on("auth_failure", (msg) => {
     console.error(`[${sessionId}] Authentication failed:`, msg);
   });
-
-  // client.on('disconnected', (reason) => {
-  //   // io.to(sessionId).emit('disconnected', { sessionId, reason });
-  //   // sessions.delete(sessionId);
-  //   // saveSessionsToFile();
-  //   console.log(`[${sessionId}] Disconnected:`, reason);
-  //   sessions.delete(sessionId);
-  //   saveSessionsToFile();
-  // });
 
   client.on("disconnected", (reason) => {
     console.log(`[${sessionId}] Disconnected:`, reason);
@@ -150,7 +202,6 @@ function createClient(sessionId) {
   });
 
   client.on('message', msg => handleMessage(sessionId, msg));
-  // client.initialize();
   return client;
 }
 
@@ -242,36 +293,15 @@ app.get('/', (req, res) => {
   res.sendFile('index.html', { root: __dirname });
 });
 
-// Create New Session
-// app.post('/api/sessions', [
-//   body('sessionId').notEmpty(),
-// ], (req, res) => {
-//   const errors = validationResult(req);
-//   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
-
-//   const { sessionId, port } = req.body;
-//   if (sessions.has(sessionId)) return res.status(400).json({ error: 'Session already exists' });
-
-//   sessions.set(sessionId, {
-//     client: createClient(sessionId),
-//     connected: false,
-//     phoneNumber: null,
-//     pushname: null
-//   });
-
-//   saveSessionsToFile();
-//   res.json({ success: true });
-// });
 app.post("/api/sessions", [body("sessionId").notEmpty()], (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty())
     return res.status(400).json({ errors: errors.array() });
 
-  const { sessionId } = req.body; // port tidak digunakan, bisa dihapus
+  const { sessionId } = req.body; 
   if (sessions.has(sessionId))
     return res.status(400).json({ error: "Session already exists" });
 
-  // Membuat client (tanpa initialize)
   const client = createClient(sessionId);
 
   sessions.set(sessionId, {
@@ -281,7 +311,6 @@ app.post("/api/sessions", [body("sessionId").notEmpty()], (req, res) => {
     pushname: null,
   });
 
-  // PANGGIL INITIALIZE DI SINI SETELAH SESI DIBUAT
   client.initialize();
 
   saveSessionsToFile();
@@ -291,7 +320,7 @@ app.post("/api/sessions", [body("sessionId").notEmpty()], (req, res) => {
   });
 });
 
-// Dapatkan Daftar Session
+// Get sessions list
 app.get('/api/sessions', (req, res) => {
   const sessionList = Array.from(sessions.entries()).map(([sessionId, sessionData]) => ({
     sessionId,
@@ -307,7 +336,8 @@ app.post('/:sessionId/send-message', [
   body('number').notEmpty(),
   body('message').notEmpty(),
 ], async (req, res) => {
-  const session = sessions.get(req.params.sessionId);
+  const sessionId = req.params.sessionId;
+  const session = sessions.get(sessionId);
   if (!session) return res.status(404).json({ error: 'Session not found' });
 
   const errors = validationResult(req).formatWith(({ msg }) => msg);
@@ -317,17 +347,9 @@ app.post('/:sessionId/send-message', [
   const message = req.body.message;
 
   try {
-    const isRegistered = await session.client.isRegisteredUser(number);
-    if (!isRegistered){
-      connectedSocket.emit('message', `Nomor ${number.replace(/@c\.us$/, '')} tidak terdaftar`);
-      connectedSocket.emit('response', `{ status: false, message: 'Nomor ${number.replace(/@c\.us$/, '')} tidak terdaftar!'}`);
-      return res.status(422).json({
-        status: false,
-        message: 'Nomor tidak terdaftar!'
-      });
-    }
 
     const response = await session.client.sendMessage(number, message);
+    io.to(sessionId).emit("response", response);
     res.json({ status: true, response });
   } catch (err) {
     res.status(500).json({ status: false, error: err.message });
@@ -408,7 +430,7 @@ const findGroupByName = async function(client, name) {
 };
 
 // Send message to group
-// You can use chatID or group name, yea!
+// You can use chatID or group name
 app.post('/:sessionId/send-group-message', [
   body('id').custom((value, { req }) => {
     if (!value && !req.body.name) {
@@ -501,7 +523,7 @@ app.post('/:sessionId/clear-message', [
 });
 
 // Delete your own message on spesific chat
-app.post('/delete-message', [
+app.post('/:sessionId/delete-message', [
   body('number').notEmpty(),
 ], async (req, res) => {
   const session = sessions.get(req.params.sessionId);
@@ -577,24 +599,74 @@ app.post("/api/sessions/:sessionId/logout", (req, res) => {
 
 // Socket.IO Setup
 io.on('connection', (socket) => {
-  socket.on('joinSession', (sessionId) => {
+  socket.on("joinSession", (sessionId) => {
     socket.join(sessionId);
     const session = sessions.get(sessionId);
     if (session && session.connected) {
-      socket.emit('ready', {
+      socket.emit("ready", {
         sessionId,
         pushname: session.pushname,
-        phoneNumber: session.phoneNumber
+        phoneNumber: session.phoneNumber,
       });
     }
   });
 
-  socket.on('disconnectSession', (sessionId) => {
+  socket.on("disconnectSession", (sessionId) => {
     const session = sessions.get(sessionId);
     if (session) {
       session.client.destroy();
       sessions.delete(sessionId);
-      io.to(sessionId).emit('disconnected', { sessionId, reason: 'Manual disconnect' });
+      io.to(sessionId).emit("disconnected", {
+        sessionId,
+        reason: "Manual disconnect",
+      });
+    }
+  });
+
+  socket.on("deleteSession", async (sessionId) => {
+    console.log(`[${sessionId}] Received request to delete session.`);
+    const session = sessions.get(sessionId);
+    const sessionFolderPath = path.join(
+      __dirname,
+      ".wwebjs_auth",
+      `session-${sessionId}`
+    );
+
+    try {
+      if (session) {
+        console.log(`[${sessionId}] Destroying client...`);
+        await session.client.destroy();
+      }
+
+      sessions.delete(sessionId);
+      console.log(`[${sessionId}] Deleted from memory map.`);
+
+      saveSessionsToFile();
+      console.log(`[${sessionId}] Updated sessions.json.`);
+
+      setTimeout(() => {
+        try {
+          if (fs.existsSync(sessionFolderPath)) {
+            fs.rmSync(sessionFolderPath, { recursive: true, force: true });
+            console.log(`[${sessionId}] Deleted auth folder.`);
+          }
+          io.emit("sessionDeleted", sessionId);
+          console.log(`[${sessionId}] Deletion process completed.`);
+        } catch (err) {
+          console.error(
+            `[${sessionId}] Failed to delete auth folder after delay:`,
+            err
+          );
+        }
+      }, 500);
+    } catch (err) {
+      if (err.message.includes("Target closed")) {
+        console.warn(
+          `[${sessionId}] Gracefully handled "Target closed" error during session destruction.`
+        );
+      } else {
+        console.error(`[${sessionId}] Failed to destroy session client:`, err);
+      }
     }
   });
 });
